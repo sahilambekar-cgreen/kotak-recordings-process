@@ -1,0 +1,14 @@
+# Output recordings and uploaded/filled sheets -- customer data, never commit.
+Downloaded_Recordings/
+recordings_ui/uploads/
+*.xlsx
+*.xls
+*.xlsm
+*.csv
+
+# Machine-specific settings (app.py has the same defaults).
+recordings_ui/config.json
+.claude/
+
+__pycache__/
+*.pyc

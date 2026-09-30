@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>Kotak Recording Pipeline</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<!-- ============================== top bar ============================== -->
+<header class="topbar">
+  <div class="topbar-in">
+
+    <div class="brand">
+      <svg class="mark" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 14v-4M8 18V6M12 21V3M16 18V6M20 14v-4"
+              stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/>
+      </svg>
+      <div>
+        <strong>Recording Pipeline</strong>
+        <span>Kotak collections</span>
+      </div>
+    </div>
+
+    <div class="segmented" role="tablist">
+      <span class="thumb"></span>
+      <button class="tab active" data-product="TW" role="tab">
+        <span class="segdot"></span>Two-Wheeler
+      </button>
+      <button class="tab" data-product="CC" role="tab">
+        <span class="segdot"></span>Credit Card
+      </button>
+    </div>
+
+    <button class="btn subtle" id="openSettings">
+      <svg viewBox="0 0 24 24" class="ico" aria-hidden="true">
+        <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2" fill="none"/>
+        <path d="M12 2v3M12 19v3M22 12h-3M5 12H2M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1M18.4 18.4l-2.1-2.1M7.7 7.7L5.6 5.6"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/>
+      </svg>
+      <span class="lbl">Settings</span>
+    </button>
+
+  </div>
+</header>
+
+<main id="panels"></main>
+
+<!-- ------------------------- one product panel ------------------------- -->
+<template id="panelTpl">
+  <section class="panel" data-product="">
+
+    <header class="pagehead">
+      <div class="pagehead-text">
+        <h1 class="pagetitle"></h1>
+        <p class="pagesub">Saving to <code class="outPath"></code></p>
+      </div>
+      <span class="chip stateChip">Waiting for a workbook</span>
+    </header>
+
+    <ol class="steps">
+
+      <!-- step 1 -->
+      <li class="step active" data-step="1">
+        <div class="rail"><span class="node">1</span></div>
+        <div class="body">
+          <div class="stephead">
+            <h2>Workbook</h2>
+            <span class="pill sheetPill"></span>
+          </div>
+
+          <label class="drop">
+            <input type="file" accept=".xlsx,.xlsm,.xls,.csv" hidden>
+            <span class="dropbadge">
+              <svg viewBox="0 0 24 24" class="dropico" aria-hidden="true">
+                <path d="M12 16V4M12 4L7.5 8.5M12 4l4.5 4.5M4 16v2.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V16"
+                      stroke="currentColor" stroke-width="1.9" stroke-linecap="round"
+                      stroke-linejoin="round" fill="none"/>
+              </svg>
+            </span>
+            <strong class="dropTitle">Drop the sheet here</strong>
+            <span class="dropSub">or click to browse &middot; .xlsx / .csv</span>
+          </label>
+
+          <div class="row hidden sheetRow">
+            <label>Sheet</label>
+            <select class="sheetSelect"></select>
+          </div>
+
+          <div class="report hidden"></div>
+        </div>
+      </li>
+
+      <!-- step 2 -->
+      <li class="step locked fillCard" data-step="2">
+        <div class="rail"><span class="node">2</span></div>
+        <div class="body">
+          <div class="stephead">
+            <h2>Fill missing links</h2>
+            <span class="pill fillPill"></span>
+          </div>
+          <p class="hint">
+            A row naming a tone keeps it; a blank row is given one at random. Paths are
+            rewritten to your tone folder. Writes a new workbook &mdash; your original
+            is untouched.
+          </p>
+          <div class="actions">
+            <button class="btn primary fillBtn" disabled>Fill links</button>
+            <a class="btn subtle hidden getWorkbook" download>Download filled sheet</a>
+            <button class="btn subtle hidden useFilled">Use for step 3</button>
+          </div>
+          <div class="progress hidden" data-kind="fill"></div>
+        </div>
+      </li>
+
+      <!-- step 3 -->
+      <li class="step locked dlCard" data-step="3">
+        <div class="rail"><span class="node">3</span></div>
+        <div class="body">
+          <div class="stephead">
+            <h2>Download recordings</h2>
+            <span class="pill dlPill"></span>
+          </div>
+          <p class="hint">
+            Saved to <code>&lt;output&gt;/YYYY/MM/DD/</code> as
+            <code class="namePattern"></code>. Files already on disk are skipped.
+          </p>
+          <div class="actions">
+            <button class="btn primary dlBtn" disabled>Start download</button>
+            <button class="btn subtle hidden cancelBtn">Cancel</button>
+            <a class="btn subtle hidden getFailures" download>Failed rows</a>
+          </div>
+          <div class="progress hidden" data-kind="download"></div>
+        </div>
+      </li>
+
+    </ol>
+  </section>
+</template>
+
+<!-- ---------------------------- progress ---------------------------- -->
+<template id="progressTpl">
+  <div class="barwrap">
+    <div class="bar"><div class="fill"></div></div>
+    <span class="pct">0%</span>
+  </div>
+  <div class="stats">
+    <span class="counter"></span>
+    <span class="eta"></span>
+  </div>
+  <div class="tallies"></div>
+  <details class="logbox">
+    <summary>Activity log</summary>
+    <pre class="log"></pre>
+  </details>
+</template>
+
+<!-- ---------------------------- settings ---------------------------- -->
+<div class="backdrop hidden" id="settings">
+  <div class="modal">
+    <div class="modalhead">
+      <h2>Settings</h2>
+      <button class="btn subtle icon" id="closeSettings" aria-label="Close">
+        <svg viewBox="0 0 24 24" class="ico" aria-hidden="true">
+          <path d="M6 6l12 12M18 6L6 18" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" fill="none"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="modalbody">
+      <section class="group">
+        <h3>Output folders</h3>
+        <p class="hint">TW and CC never share a folder.</p>
+        <div class="field">
+          <label>Two-Wheeler</label>
+          <input type="text" id="output_tw" spellcheck="false">
+        </div>
+        <div class="field">
+          <label>Credit Card</label>
+          <input type="text" id="output_cc" spellcheck="false">
+        </div>
+      </section>
+
+      <section class="group">
+        <h3>NC tone folder</h3>
+        <p class="hint">
+          Folder holding the not-connected outcome recordings. A row naming one of
+          these keeps its own tone; a blank row is given one at random.
+        </p>
+        <div class="field">
+          <label>Folder</label>
+          <input type="text" id="nc_folder" spellcheck="false">
+        </div>
+        <div id="pool" class="tonelist"></div>
+      </section>
+
+      <section class="group">
+        <h3>Download</h3>
+        <div class="grid3">
+          <div class="field">
+            <label>Workers</label>
+            <input type="number" id="workers" min="1" max="64">
+          </div>
+          <div class="field">
+            <label>Retries</label>
+            <input type="number" id="retries" min="1" max="10">
+          </div>
+          <div class="field">
+            <label>Timeout (s)</label>
+            <input type="number" id="timeout" min="5" max="600">
+          </div>
+        </div>
+        <div class="field">
+          <label>When two rows produce the same filename</label>
+          <select id="on_collision">
+            <option value="suffix">Keep both &mdash; append _1, _2</option>
+            <option value="overwrite">Overwrite (original behaviour)</option>
+          </select>
+        </div>
+      </section>
+    </div>
+
+    <div class="modalfoot">
+      <span class="saved hidden">Saved</span>
+      <button class="btn primary" id="saveSettings">Save changes</button>
+    </div>
+  </div>
+</div>
+
+<script>window.FILENAME_PREFIXES = {{ prefixes|tojson }};</script>
+<script src="/static/app.js"></script>
+</body>
+</html>
