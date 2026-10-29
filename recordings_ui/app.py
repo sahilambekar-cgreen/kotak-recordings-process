@@ -5,7 +5,7 @@ Run:  python app.py    then open http://127.0.0.1:5000
 Stage 1 (Fill)     : empty Recording_Path cells get an S3 link from the NC pool.
 Stage 2 (Download) : every Recording_Path is fetched into a per-product tree.
 
-TW and CC keep entirely separate uploads, sheets, jobs and output folders.
+TW, CC and PL keep entirely separate uploads, sheets, jobs and output folders.
 """
 
 import io
@@ -18,7 +18,7 @@ import pandas as pd
 from flask import Flask, jsonify, request, send_file, render_template
 
 from core import fill, jobs, pool, sheets
-from core.naming import PREFIX_BY_PRODUCT
+from core.naming import PATTERN_BY_PRODUCT
 from core.download import run as run_download
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -33,6 +33,7 @@ app.config["MAX_CONTENT_LENGTH"] = 256 * 1024 * 1024   # 256 MB workbooks
 DEFAULT_CONFIG = {
     "output_tw": os.path.join(BASE_DIR, "Downloaded_Recordings", "TW"),
     "output_cc": os.path.join(BASE_DIR, "Downloaded_Recordings", "CC"),
+    "output_pl": os.path.join(BASE_DIR, "Downloaded_Recordings", "PL"),
     "workers": 10,
     "retries": 3,
     "timeout": 60,
@@ -65,19 +66,19 @@ def save_config(cfg):
 
 
 def output_root(cfg, product):
-    return cfg["output_tw"] if product == "TW" else cfg["output_cc"]
+    return cfg[f"output_{product.lower()}"]
 
 
 def product_of(body):
-    """TW or CC. The upload token carries it, so /api/inspect need not send it."""
+    """TW, CC or PL. The upload token carries it, so /api/inspect need not send it."""
     return body.get("product") or (body.get("token") or "").split(":", 1)[0] or "TW"
 
 
 @app.route("/")
 def index():
-    # The filename prefix differs per product and the panel is built client
+    # The filename pattern differs per product and the panel is built client
     # side, so hand the real map to the page rather than repeating it in JS.
-    return render_template("index.html", prefixes=PREFIX_BY_PRODUCT)
+    return render_template("index.html", patterns=PATTERN_BY_PRODUCT)
 
 
 @app.route("/api/config", methods=["GET", "POST"])

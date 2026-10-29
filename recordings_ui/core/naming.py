@@ -1,9 +1,8 @@
 """Filename and path rules, ported from the original scripts.
 
-The bank consumes the filename, so these rules are the contract:
-    <prefix>_<customer_id>_<YYYYMMDD><HHMMSS>_<phone>_KMBL02120_<did_no>.mp3
-and the file is filed under <root>/<YYYY>/<MM>/<DD>/. The prefix depends on the
-product -- see PREFIX_BY_PRODUCT.
+The bank consumes the filename, so these rules are the contract. The pattern
+depends on the product -- see PATTERN_BY_PRODUCT -- and the file is filed
+under <root>/<YYYY>/<MM>/<DD>/.
 
 `build_filename` handles one row; `build_filenames` does a whole sheet with
 pandas vector ops and is ~40x faster. They must agree -- the test suite checks
@@ -36,25 +35,24 @@ IDENTITY_COLUMNS = [
     "Call_time",
 ]
 
-# The bank takes a different prefix per product: TW is the two-wheeler book,
-# CC the credit-card one. Getting this wrong is invisible until the bank
-# rejects the batch, so `prefix_for` refuses an unknown product rather than
-# guessing a default.
-PREFIX_BY_PRODUCT = {
-    "TW": "RARDWHEELS",
-    "CC": "RARDCCSTC",
+# The bank takes a different filename per product: TW is the two-wheeler book,
+# CC the credit-card one, PL personal loans. {stamp} is YYYYMMDDHHMMSS.
+# Getting this wrong is invisible until the bank rejects the batch, so
+# `pattern_for` refuses an unknown product rather than guessing a default.
+PATTERN_BY_PRODUCT = {
+    "TW": "RARDWHEELS_{customer_id}_{stamp}_{phone}_KMBL02120_{did}.mp3",
+    "CC": "RARDCCSTC_{customer_id}_{stamp}_{phone}_KMBL02120_{did}.mp3",
+    "PL": "{customer_id}_{phone}_{stamp}.mp3",
 }
 
-BRANCH_CODE = "KMBL02120"
 
-
-def prefix_for(product):
+def pattern_for(product):
     try:
-        return PREFIX_BY_PRODUCT[product]
+        return PATTERN_BY_PRODUCT[product]
     except KeyError:
         raise ValueError(
             f"Unknown product {product!r} -- expected one of "
-            + ", ".join(sorted(PREFIX_BY_PRODUCT))
+            + ", ".join(sorted(PATTERN_BY_PRODUCT))
         ) from None
 
 # Characters Windows rejects in a filename. The backslash is first and must
@@ -140,13 +138,11 @@ def build_filename(row, product):
     connect = parse_datetime(row.get("Call_connect_time"))
     hhmmss = call_time_hhmmss(row.get("Call_time"), connect)
 
-    name = (
-        f"{prefix_for(product)}_"
-        f"{clean(row.get('customer_id'))}_"
-        f"{connect.strftime('%Y%m%d')}{hhmmss}_"
-        f"{clean(row.get('phone_number'))}_"
-        f"{BRANCH_CODE}_"
-        f"{clean(row.get('did_no'))}.mp3"
+    name = pattern_for(product).format(
+        customer_id=clean(row.get("customer_id")),
+        stamp=connect.strftime("%Y%m%d") + hhmmss,
+        phone=clean(row.get("phone_number")),
+        did=clean(row.get("did_no")),
     )
     return name, connect
 
@@ -209,13 +205,17 @@ def build_filenames(df, product):
     valid = connect.notna()
     hhmmss = _hhmmss_series(df["Call_time"], connect).fillna("")
 
-    names = (
-        prefix_for(product) + "_"
-        + clean_series(df["customer_id"]) + "_"
-        + connect.dt.strftime("%Y%m%d").fillna("") + hhmmss + "_"
-        + clean_series(df["phone_number"]) + "_"
-        + BRANCH_CODE + "_"
-        + clean_series(df["did_no"]) + ".mp3"
+    pattern = pattern_for(product)
+    stamps = connect.dt.strftime("%Y%m%d").fillna("") + hhmmss
+    names = pd.Series(
+        [
+            pattern.format(customer_id=c, stamp=s, phone=p, did=d)
+            for c, s, p, d in zip(
+                clean_series(df["customer_id"]), stamps,
+                clean_series(df["phone_number"]), clean_series(df["did_no"]),
+            )
+        ],
+        index=df.index,
     )
     return names.where(valid, None), connect, valid
 

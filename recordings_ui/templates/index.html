@@ -32,6 +32,9 @@
       <button class="tab" data-product="CC" role="tab">
         <span class="segdot"></span>Credit Card
       </button>
+      <button class="tab" data-product="PL" role="tab">
+        <span class="segdot"></span>Personal Loan
+      </button>
     </div>
 
     <button class="btn subtle" id="openSettings">
@@ -173,7 +176,7 @@
     <div class="modalbody">
       <section class="group">
         <h3>Output folders</h3>
-        <p class="hint">TW and CC never share a folder.</p>
+        <p class="hint">Products never share a folder.</p>
         <div class="field">
           <label>Two-Wheeler</label>
           <input type="text" id="output_tw" spellcheck="false">
@@ -181,6 +184,10 @@
         <div class="field">
           <label>Credit Card</label>
           <input type="text" id="output_cc" spellcheck="false">
+        </div>
+        <div class="field">
+          <label>Personal Loan</label>
+          <input type="text" id="output_pl" spellcheck="false">
         </div>
       </section>
 
@@ -230,7 +237,7 @@
   </div>
 </div>
 
-<script>window.FILENAME_PREFIXES = {{ prefixes|tojson }};</script>
+<script>window.FILENAME_PATTERNS = {{ patterns|tojson }};</script>
 <script src="/static/app.js"></script>
 </body>
 </html>

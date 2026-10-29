@@ -17,7 +17,11 @@ far -- `date` (TW_June_ADO), `Call date` (CC_June_ADO), `Call_dates`
 Matching on names alone would break again on the next export, so columns are
 classified by what they CONTAIN; names only break ties.
 
-`normalize` rewrites a Shape B frame into Shape A. Everything downstream
+  Shape C -- the raw Ozonetel dialer CDR (Kotak PL CDR): every column has its
+      own name (`Recording URL`, `Caller No`, `UUI`, `Call Date`, `Start Time`)
+      and is renamed first; see _from_cdr.
+
+`normalize` rewrites Shape B and C frames into Shape A. Everything downstream
 (naming, fill, download) only ever sees Shape A and needs no changes. It is
 applied in sheets.load(), so all three routes get it.
 """
@@ -38,7 +42,7 @@ CANONICAL_TIME_COLUMN = "Call_time"
 # (18:08:52) and Call_time (18:11:27) hold a time, and the processed sheet took
 # its filename time from Call_time -- so Call_time must win to keep filenames
 # byte-identical to the ones already delivered to the bank.
-_TIME_PREFERENCE = ["Call_time", "Call_connect_time", "Call end time"]
+_TIME_PREFERENCE = ["Call_time", "Call_connect_time", "Start Time", "Call end time"]
 _DATE_PREFERENCE = [
     "Call_connect_time",
     "Call_dates",
@@ -106,6 +110,48 @@ def _pick(kinds, wanted, preference):
     return candidates[0] if candidates else None
 
 
+# Shape C -- the raw Ozonetel CDR (Kotak PL CDR). Plain renames:
+_CDR_RENAMES = {
+    "Recording URL": "Recording_Path",
+    "Caller No": "phone_number",
+    "UUI": "customer_id",   # the SPLN... account id; blank on manual dials
+}
+# The CDR's DID sits in a different column per day: days are pasted together
+# with the trailing columns shifted by one. The per-call DID is the last
+# phone-number-sized value in this tail; the constant trunk number sits before it.
+_CDR_DID_TAIL = ["DynamicDid", "DID", "Dial Count", "Dial DID", "Unnamed: 39"]
+
+
+def _digits(value):
+    if pd.isna(value):
+        return ""
+    if isinstance(value, float):
+        value = int(value)
+    return "".join(ch for ch in str(value) if ch.isdigit())
+
+
+def _cdr_did(row):
+    for value in reversed(row.tolist()):
+        digits = _digits(value)
+        if len(digits) >= 10:
+            # 918040101910 -> 8040101910, matching did_no in the other books.
+            return digits[-10:]
+    return ""
+
+
+def _from_cdr(df):
+    """Rename a Shape C frame's columns to the canonical ones. Returns (df, mapping)."""
+    if "Recording URL" not in df.columns or "Recording_Path" in df.columns:
+        return df, {}
+    df = df.rename(columns=_CDR_RENAMES)
+    mapping = {new: old for old, new in _CDR_RENAMES.items()}
+    tail = [c for c in _CDR_DID_TAIL if c in df.columns]
+    if "did_no" not in df.columns and tail:
+        df["did_no"] = df[tail].apply(_cdr_did, axis=1)
+        mapping["did_no"] = " / ".join(tail)
+    return df, mapping
+
+
 def normalize(df):
     """Return (frame, mapping) with the date/time columns in canonical places.
 
@@ -113,6 +159,12 @@ def normalize(df):
     and is empty when the sheet was already Shape A. The frame is returned
     untouched in that case.
     """
+    df, cdr_mapping = _from_cdr(df)
+    df, mapping = _normalize_dates(df)
+    return df, {**cdr_mapping, **mapping}
+
+
+def _normalize_dates(df):
     kinds = {name: classify(df[name]) for name in df.columns}
 
     date_column = _pick(kinds, DATE, _DATE_PREFERENCE)

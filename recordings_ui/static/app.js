@@ -1,7 +1,8 @@
 /* Kotak recording pipeline - front end.
-   Two independent product panels (TW, CC) driving the same three-step flow. */
+   Independent product panels (TW, CC, PL) driving the same three-step flow. */
 
-const PRODUCTS = { TW: "Two-Wheeler", CC: "Credit Card" };
+const PRODUCTS = { TW: "Two-Wheeler", CC: "Credit Card", PL: "Personal Loan" };
+const outputKey = (product) => `output_${product.toLowerCase()}`;
 const state = {};        // product -> { token, sheet, report }
 let config = null;
 
@@ -35,11 +36,9 @@ async function boot() {
     const panel = $(".panel", node);
     panel.dataset.product = product;
     $(".pagetitle", panel).textContent = PRODUCTS[product];
-    // Each product is delivered under its own prefix; show this panel's.
-    const prefix = (window.FILENAME_PREFIXES || {})[product];
-    if (prefix) {
-      $(".namePattern", panel).textContent = `${prefix}_…_KMBL02120_….mp3`;
-    }
+    // Each product has its own filename pattern; show this panel's.
+    const pattern = (window.FILENAME_PATTERNS || {})[product];
+    if (pattern) $(".namePattern", panel).textContent = pattern;
     if (product === "TW") panel.classList.add("active");
     wirePanel(panel, product);
     panels.appendChild(node);
@@ -75,8 +74,7 @@ function moveThumb() {
 
 function paintOutputPaths() {
   Object.keys(PRODUCTS).forEach((product) => {
-    $(".outPath", panelOf(product)).textContent =
-      product === "TW" ? config.output_tw : config.output_cc;
+    $(".outPath", panelOf(product)).textContent = config[outputKey(product)];
   });
 }
 
@@ -508,8 +506,7 @@ function wireSettings() {
 }
 
 function fillSettings() {
-  $("#output_tw").value = config.output_tw;
-  $("#output_cc").value = config.output_cc;
+  Object.keys(PRODUCTS).forEach((p) => ($(`#${outputKey(p)}`).value = config[outputKey(p)]));
   $("#workers").value = config.workers;
   $("#retries").value = config.retries;
   $("#timeout").value = config.timeout;
@@ -546,8 +543,9 @@ async function saveSettings() {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      output_tw: $("#output_tw").value.trim(),
-      output_cc: $("#output_cc").value.trim(),
+      ...Object.fromEntries(
+        Object.keys(PRODUCTS).map((p) => [outputKey(p), $(`#${outputKey(p)}`).value.trim()])
+      ),
       workers: +$("#workers").value,
       retries: +$("#retries").value,
       timeout: +$("#timeout").value,
